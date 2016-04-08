@@ -44,4 +44,4 @@ def createTest(case):
         path=[Dots[1], Dots[3], Dots[5], Dots[7], Dots[1]]
         mymap.addpath(path, Colors[0])
 
-    mymap.draw('../Model/'+str(case)+'.html')
+    mymap.draw('../Output/'+str(case)+'.html')

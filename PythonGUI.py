@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import MILP
 import DrawMap as dm
+import os
 class simpleGUI_tk(tk.Tk):
 
     def __init__(self,parent):
@@ -45,8 +46,14 @@ class simpleGUI_tk(tk.Tk):
         except:
             print 'Error in draw output::createTest'
 
+        filename = os.getcwd()+'\\..\Output\\'+str(292)+'.html'
+        #C:\Users\eshaaban\PycharmProjects\MISTUI\Output\292.html
+        webbrowser.open_new_tab(filename)
 
     def aboutFinder(self):
+        print("here is the explanation of what the finder does, add extra stuff")
+
+    def helpFinder(self):
         print("here is the explanation of what the finder does, add extra stuff")
 
     def analyze(self):
@@ -54,7 +61,6 @@ class simpleGUI_tk(tk.Tk):
     def createModel(self):
         print("")
     def menu(self):
-
         menubar = tk.Menu()
 
         # create a pulldown menu, and add it to the menu bar
@@ -62,23 +68,26 @@ class simpleGUI_tk(tk.Tk):
         # filemenu.add_command(label="Open Test Case", command=self.openFile)
         filemenu.add_command(label='Preporcess', command=self.Preprocess)
         filemenu.add_command(label="Run", command=self.runFinderProgram)
-        filemenu.add_command(label="Draw", command=self.drawOutput)
+
+        drawMenu = Menu(filemenu)
+        drawMenu.add_command(label='Reported Locations')
+        drawMenu.add_command(label='Search Area', command=self.drawOutput)
+        filemenu.add_cascade(label="Draw", menu=drawMenu)
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.quit)
+
         menubar.add_cascade(label="File", menu=filemenu)
-
-
-
         helpmenu = tk.Menu(menubar, tearoff=0)
+        helpmenu.add_command(label="Help", command=self.helpFinder)
         helpmenu.add_command(label="About", command=self.aboutFinder)
         menubar.add_cascade(label="Help", menu=helpmenu)
 
-        modelMenu = tk.Menu(menubar, tearoff = 0)
-        modelMenu.add_command(label="Create Model", command=self.createModel())
-        menubar.add_cascade(label="Create Model", menu=modelMenu)
-        analysisMenu = tk.Menu(menubar, tearoff = 0)
-        analysisMenu.add_command(label="Analyze Result", command=self.analyze())
-        menubar.add_cascade(label="Analyze Result", menu=analysisMenu)
+        # modelMenu = tk.Menu(menubar, tearoff = 0)
+        # modelMenu.add_command(label="Create Model", command=self.createModel())
+        # menubar.add_cascade(label="Create Model", menu=modelMenu)
+        # analysisMenu = tk.Menu(menubar, tearoff = 0)
+        # analysisMenu.add_command(label="Analyze Result", command=self.analyze())
+        # menubar.add_cascade(label="Analyze Result", menu=analysisMenu)
         # display the menu
         self.config(menu=menubar)
 
@@ -111,7 +120,7 @@ if __name__ == "__main__":
     root = simpleGUI_tk(None)
     root.geometry('450x250')
 
-    root.title('Missing Persons Locater')
+    root.title('Missing Person Intelligence Synthesis Toolkit')
     obj = MILP.MILP('../Data/Beta.csv', '', gridDim=1)
     root.mainloop()
 
