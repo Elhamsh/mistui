@@ -1,12 +1,12 @@
-from tkinter import *
-from tkinter import ttk
-from demopanels import MsgPanel, SeeDismissPanel
-import tkinter as tk
+from Tkinter import *
+import ttk
+import Tkinter as tk
 import webbrowser
 import os
 import pandas as pd
 import numpy as np
-
+import MILP
+import DrawMap as dm
 class simpleGUI_tk(tk.Tk):
 
     def __init__(self,parent):
@@ -15,14 +15,22 @@ class simpleGUI_tk(tk.Tk):
 
         self.parent = parent
         self.menu()
+        self.value_of_combo = ''
         self.list()
+        self.button = tk.Button(self.parent, text = "Output Map")
 
     def openFile(self):
         print("")
         #
+    def Preprocess(self):
+        obj.AtomRepDistDRT()
 
     def runFinderProgram(self):
         print("")
+        cases= [21.0, 24.0, 42.0, 53.0, 68.0, 85.0, 107.0, 110.0, 112.0, 166.0, 177.0, 211.0, 218.0, 219.0, 231.0, 234.0, 239.0, 240.0,
+        241.0, 248.0, 251.0, 253.0, 256.0, 258.0, 265.0, 274.0, 276.0,279.0,280.0,283.0,286.0,287.0]
+        obj.Test(theta=.5,eps=0, wcc='WO', TrainSet=cases, Test=292.0)
+
     # def button(self):
         # print(os.getcwd())
         # f = open('map_240.0.html')
@@ -30,6 +38,12 @@ class simpleGUI_tk(tk.Tk):
         # webbrowser.open_new_tab('map_240.0.html')
         #call elham's code
 
+
+    def drawOutput(self):
+        try:
+            dm.createTest(292)
+        except:
+            print 'Error in draw output::createTest'
 
 
     def aboutFinder(self):
@@ -46,8 +60,9 @@ class simpleGUI_tk(tk.Tk):
         # create a pulldown menu, and add it to the menu bar
         filemenu = tk.Menu(menubar, tearoff=0)
         # filemenu.add_command(label="Open Test Case", command=self.openFile)
-
+        filemenu.add_command(label='Preporcess', command=self.Preprocess)
         filemenu.add_command(label="Run", command=self.runFinderProgram)
+        filemenu.add_command(label="Draw", command=self.drawOutput)
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.quit)
         menubar.add_cascade(label="File", menu=filemenu)
@@ -73,21 +88,22 @@ class simpleGUI_tk(tk.Tk):
 
         self.grid_columnconfigure(0,weight=1)
 
+    def newselection(self, event):
+        self.value_of_combo = self.box.get()
+        print(self.value_of_combo)
     def list(self):
-        input=pd.read_csv('FinalCases_V13.csv', encoding='latin1',dtype={'Found lat':str})
-         # dtype={'Found lat':str}
-        nameList=list(input['name'][np.logical_or(input['Found lat'].isnull(),input['Found lng'].isnull())].values)
-        demoPanel = Frame(self)
-        demoPanel.pack(side=TOP, fill=BOTH, expand=Y)
+        # input=pd.read_csv('FinalCases_V13.csv', encoding='latin1',dtype={'Found lat':str})
 
-        # create comboboxes
+        self.cases=pd.read_csv('../Data/FinalCases_V14.csv', encoding='latin1',dtype={'Found lat':str})
+        nameList=list(self.cases['name'][np.logical_or(self.cases['Found lat'].isnull(),self.cases['Found lng'].isnull())].values)
 
-        showNames = ttk.Labelframe(demoPanel, text='Name List')
-        ttk.Combobox(showNames,values=nameList, state='readonly').pack(pady=5, padx=10)
-        showNames.pack(in_=demoPanel, side=TOP, pady=5, padx=10)
-
-        button = tk.Button(self,text = "Output Map")
-        button.pack(in_ = demoPanel, side = BOTTOM, pady = 80, padx = 10)
+        self.box_value = StringVar()
+        self.box = ttk.Combobox(self.parent, textvariable=self.box_value, state='readonly')
+        self.box.bind("<<ComboboxSelected>>", self.newselection)
+        self.box['values'] = nameList
+        self.box.set('Case Name')
+        # self.box.current(0)
+        self.box.grid(column=0, row=0)
 
 
 if __name__ == "__main__":
@@ -96,8 +112,7 @@ if __name__ == "__main__":
     root.geometry('450x250')
 
     root.title('Missing Persons Locater')
-
-
+    obj = MILP.MILP('../Data/Beta.csv', '', gridDim=1)
     root.mainloop()
 
 

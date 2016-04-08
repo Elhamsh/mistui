@@ -154,18 +154,18 @@ class maps:
     def drawpointRegion(self,f,lat,lon,color,title):
         f.write('\t\tvar latlng = new google.maps.LatLng(%f, %f);\n'%(lat,lon))
         # f.write('\t\tvar img = new google.maps.MarkerImage(\'%s\');\n' % (self.coloricon.replace('XXXXXX',color)))
-        f.write('\t\tvar lab = "%s";\n'%(str(title[:])))
+        f.write('\t\tvar lab = "%s";\n'%(str(title)))
         # f.write('geodesic: %s,\n' % (str(geodesic).lower()))
         f.write('\t\tvar marker = new google.maps.Marker({\n')
         # if title !=None:
         #     f.write('\t\ttitle: "'+str(title)+'",\n')
-        f.write('\t\ticon: "%s",\n'%("http://maps.google.com/mapfiles/kml/pal3/"+color+".png"))
+        f.write('\t\ticon: "%s",\n'%("http://maps.google.com/mapfiles/ms/icons/"+color+".png"))
         f.write('\t\tposition: latlng,\n')
-        f.write('\t\ttitle: lab,\n')
+        f.write('\t\tlabel: lab,\n')
         f.write('\t\t});\n')
         f.write('\t\tmarker.setMap(map);\n')
         f.write('\n')
-        
+
     def drawPolyline(self,f,path,\
             clickable = False, \
             geodesic = True,\
@@ -223,24 +223,24 @@ class maps:
 if __name__ == "__main__":
 
     ########## CONSTRUCTOR: pygmaps(latitude, longitude, zoom) ##############################
-    # DESC:        initialize a map  with latitude and longitude of center point  
+    # DESC:        initialize a map  with latitude and longitude of center point
     #        and map zoom level "15"
     # PARAMETER1:    latitude (float) latittude of map center point
     # PARAMETER2:    longitude (float) latittude of map center point
     # PARAMETER3:    zoom (int)  map zoom level 0~20
     # RETURN:    the instant of pygmaps
     #========================================================================================
-    mymap = pygmaps(37.428, -122.145, 16)
+    mymap = maps(37.428, -122.145, 16)
 
 
     ########## FUNCTION: setgrids(start-Lat, end-Lat, Lat-interval, start-Lng, end-Lng, Lng-interval) ######
-    # DESC:        set grids on map  
+    # DESC:        set grids on map
     # PARAMETER1:    start-Lat (float), start (minimum) latittude of the grids
     # PARAMETER2:    end-Lat (float), end (maximum) latittude of the grids
-    # PARAMETER3:    Lat-interval (float)  grid size in latitude 
+    # PARAMETER3:    Lat-interval (float)  grid size in latitude
     # PARAMETER4:    start-Lng (float), start (minimum) longitude of the grids
     # PARAMETER5:    end-Lng (float), end (maximum) longitude of the grids
-    # PARAMETER6:    Lng-interval (float)  grid size in longitude 
+    # PARAMETER6:    Lng-interval (float)  grid size in longitude
     # RETURN:    no returns
     #========================================================================================
     mymap.setgrids(37.42, 37.43, 0.001, -122.15, -122.14, 0.001)
@@ -255,20 +255,20 @@ if __name__ == "__main__":
     #        e.g. red "#FF0000", Blue "#0000FF", Green "#00FF00"
     # RETURN:    no return
     #========================================================================================
-    mymap.addpoint(37.427, -122.145, "#0000FF")
+    # mymap.addpoint(37.427, -122.145, "#0000FF")
 
 
     ########## FUNCTION:  addradpoint(latitude, longitude, radius, [color])##################
     # DESC:     add a point with a radius (Meter) - Draw cycle
     # PARAMETER1:    latitude (float) latitude of the point
     # PARAMETER2:    longitude (float) longitude of the point
-    # PARAMETER3:    radius (float), radius  in meter 
+    # PARAMETER3:    radius (float), radius  in meter
     # PARAMETER4:    color (string) color of the point showed in map, using HTML color code
     #        HTML COLOR CODE:  http://www.computerhope.com/htmcolor.htm
     #        e.g. red "#FF0000", Blue "#0000FF", Green "#00FF00"
-    # RETURN:    no return 
+    # RETURN:    no return
     #========================================================================================
-    mymap.addradpoint(37.429, -122.145, 95, "#FF0000","hello")
+    # mymap.addradpoint(37.429, -122.145, 95, "#FF0000","hello")
 
 
     ########## FUNCTION:  addpath(path,[color])##############################################
