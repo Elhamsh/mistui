@@ -20,6 +20,7 @@ class simpleGUI_tk(tk.Tk):
         self.list()
         self.button = tk.Button(self.parent, text = "Output Map")
 
+
     def openFile(self):
         print("")
         #
@@ -53,13 +54,22 @@ class simpleGUI_tk(tk.Tk):
     def aboutFinder(self):
         print("here is the explanation of what the finder does, add extra stuff")
 
-    def helpFinder(self):
-        print("here is the explanation of what the finder does, add extra stuff")
 
-    def analyze(self):
-        print("")
-    def createModel(self):
-        print("")
+    def helpFinder(self):
+        window = tk.Toplevel(root)
+        window.minsize(400,300);
+        window.title("Help")
+        helpMessage = "Instructions to run Finder: \n1. Select the case name to be analyzed\n" + "2. Press the 'Preprocess' button under the File tab." +\
+                      "\n3. Press the 'Run' button under the 'Preprocess' tab\n" + \
+                      "4. Under 'Draw', press 'Visualize Input' in order to see the inputs (reported locations) displayed on a map\n" +\
+                      "5. Otherwise, press 'Search Area' to display the output onto the map after the input has been processed.\n"+\
+                      "6. Lastly, 'Exit'quits out of the program\n\n" + "Shortcuts: \nPreprocess: CTRL + P\nRun: CTRL + R\nExit: CTRL + E\nVisualize Input: CTRL + I\nSearch Area: CTRL + A\n"
+        msg = Message(window, text=helpMessage)
+        msg.pack()
+
+
+
+
     def menu(self):
         menubar = tk.Menu()
 
@@ -70,7 +80,7 @@ class simpleGUI_tk(tk.Tk):
         filemenu.add_command(label="Run", command=self.runFinderProgram)
 
         drawMenu = Menu(filemenu)
-        drawMenu.add_command(label='Reported Locations')
+        drawMenu.add_command(label='Visualize Input')
         drawMenu.add_command(label='Search Area', command=self.drawOutput)
         filemenu.add_cascade(label="Draw", menu=drawMenu)
         filemenu.add_separator()
