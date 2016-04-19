@@ -23,8 +23,8 @@ class maps:
     def addpoint(self, lat, lng, color = '#FF0000', title=None):
         self.points.append((lat,lng,color,title))
 
-    def addpointRegion(self, lat, lng, color = '#FF0000', title=None):
-        self.pointsreg.append((lat,lng,color,title))
+    def addpointRegion(self, lat, lng, color = '#FF0000', label=None, title=None):
+        self.pointsreg.append((lat,lng,color,label, title))
 
     #def addpointcoord(self, coord):
     #    self.points.append((coord[0],coord[1]))
@@ -90,7 +90,7 @@ class maps:
             self.drawpoint(f,point[0],point[1],point[2],point[3])
     def drawpointsRegion(self, f):
         for point in  self.pointsreg:
-            self.drawpointRegion(f,point[0],point[1],point[2],point[3])
+            self.drawpointRegion(f,point[0],point[1],point[2],point[3],point[4])
 
     def drawradpoints(self, f):
         for rpoint in self.radpoints:
@@ -139,28 +139,30 @@ class maps:
     def drawpoint(self,f,lat,lon,color,title):
         f.write('\t\tvar latlng = new google.maps.LatLng(%f, %f);\n'%(lat,lon))
         # f.write('\t\tvar img = new google.maps.MarkerImage(\'%s\');\n' % (self.coloricon.replace('XXXXXX',color)))
-        f.write('\t\tvar lab = "%s";\n'%(str(title[:])))
+        f.write('\t\tvar tit = "%s";\n'%(str(title[:])))
         # f.write('geodesic: %s,\n' % (str(geodesic).lower()))
         f.write('\t\tvar marker = new google.maps.Marker({\n')
         # if title !=None:
         #     f.write('\t\ttitle: "'+str(title)+'",\n')
         f.write('\t\ticon: "%s",\n'%("http://maps.google.com/mapfiles/ms/icons/"+color+"-dot.png"))
         f.write('\t\tposition: latlng,\n')
-        f.write('\t\ttitle: lab,\n')
+        f.write('\t\ttitle: tit,\n')
         f.write('\t\t});\n')
         f.write('\t\tmarker.setMap(map);\n')
         f.write('\n')
 
-    def drawpointRegion(self,f,lat,lon,color,title):
+    def drawpointRegion(self,f,lat,lon,color,label, title):
         f.write('\t\tvar latlng = new google.maps.LatLng(%f, %f);\n'%(lat,lon))
         # f.write('\t\tvar img = new google.maps.MarkerImage(\'%s\');\n' % (self.coloricon.replace('XXXXXX',color)))
-        f.write('\t\tvar lab = "%s";\n'%(str(title)))
+        f.write('\t\tvar tit = "%s";\n'%(str(title)))
+        f.write('\t\tvar lab = "%s";\n'%(str(label)))
         # f.write('geodesic: %s,\n' % (str(geodesic).lower()))
         f.write('\t\tvar marker = new google.maps.Marker({\n')
         # if title !=None:
         #     f.write('\t\ttitle: "'+str(title)+'",\n')
         f.write('\t\ticon: "%s",\n'%("http://maps.google.com/mapfiles/ms/icons/"+color+".png"))
         f.write('\t\tposition: latlng,\n')
+        f.write('\t\ttitle: tit,\n')
         f.write('\t\tlabel: lab,\n')
         f.write('\t\t});\n')
         f.write('\t\tmarker.setMap(map);\n')

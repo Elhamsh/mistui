@@ -4,6 +4,7 @@ import pandas as pd
 import pygmaps
 import numpy as np
 import math
+import General as gen
 
 def _getcycle(lat, lng, radius, NumDot):
     cycle = []
@@ -22,9 +23,24 @@ def _getcycle(lat, lng, radius, NumDot):
         cycle.append((float(y*(180.0/math.pi)),float(x*(180.0/math.pi))))
     return cycle
 
+def createInput(case):
+    Reports = pd.read_csv('../Data/Checked_FinalReports.csv')
+    Colors = ["#023FA5","#7D87B9","#BEC1D4","#D6BCC0","#BB7784","#FFFFFF", "#4A6FE3","#8595E1","#B5BBE3","#E6AFB9","#E07B91","#D33F6A",
+              "#11C638","#8DD593","#C6DEC7","#EAD3C6","#F0B98D","#EF9708", "#0FCFC0","#9CDED6","#D5EAE7","#F3E1EB","#F6C4E1","#F79CD4"]
+
+    Reports_Case=Reports[Reports['Case Num']==case].dropna(subset=['Loc N/lat', 'Loc W/lng'])
+    i=Reports_Case.index[0]
+    x,y=gen.convert_DMS_to_Decimal(Reports_Case['Loc N/lat'][i], Reports_Case['Loc W/lng'][i])
+    mymap = pygmaps.maps(float(x), float(y), 9)
+    mymap.addpoint(float(x), float(y), color='blue', title=str(x)+', '+str(y))
+    for i in Reports_Case.index[1:]:
+        x,y=gen.convert_DMS_to_Decimal(Reports_Case['Loc N/lat'][i], Reports_Case['Loc W/lng'][i])
+        mymap.addpoint(float(x), float(y), color='blue', title=str(x)+', '+str(y))
+    mymap.draw('../Output/Inp_'+str(case)+'.html')
+
 def createTest(case):
 
-    Points = pd.read_csv('../Model/'+str(case)+'.02mul.csv')
+    Points = pd.read_csv('../Model/'+str(case)+'_2mul.csv')
     Colors = ["#023FA5","#7D87B9","#BEC1D4","#D6BCC0","#BB7784","#FFFFFF", "#4A6FE3","#8595E1","#B5BBE3","#E6AFB9","#E07B91","#D33F6A",
               "#11C638","#8DD593","#C6DEC7","#EAD3C6","#F0B98D","#EF9708", "#0FCFC0","#9CDED6","#D5EAE7","#F3E1EB","#F6C4E1","#F79CD4"]
 
@@ -38,7 +54,7 @@ def createTest(case):
     i=0
     for p in GPS_Coor:
         xx, yy = p.strip('()').split(', ')
-        mymap.addpointRegion(float(xx), float(yy), color="yellow", title=labels[i])
+        mymap.addpointRegion(float(xx), float(yy), color="yellow", label=labels[i], title=str(xx)+', '+str(yy))
         i+=1
         Dots=_getcycle(float(xx), float(yy), ((beta/2.)*np.sqrt(2))*1609.34, 8)
         path=[Dots[1], Dots[3], Dots[5], Dots[7], Dots[1]]

@@ -3,6 +3,10 @@ from geopy.distance import great_circle
 def convert_DMS_to_Decimal(lat, lng):
     x=''
     y=''
+    if ',' in lat:
+        lat=lat.split(',')[0]
+    if ',' in lng:
+        lng=lng.split(',')[0]
     ll = len(lat.split())
     if ll == 3:
         Dlt, Mlt, Slt = lat.split()

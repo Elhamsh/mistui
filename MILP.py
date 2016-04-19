@@ -5,14 +5,18 @@ from coinor.pulp import *
 import math
 
 class MILP():
-    def __init__(self, d2, Date, gridDim):
+    def __init__(self, gridDim):
         self.GridSize = 100
-        self.Reporter_Case = pd.read_csv(d2)
-        self.Date = Date
+        try:
+            self.Reporter_Case = pd.read_csv('../Model/Beta.csv')
+        except:
+            self.Reporter_Case =''
+        self.Date = ''
         self.Beta = pd.DataFrame(columns=['Case', 'Reporter', 'Beta'])
         self.ProbableDRT = pd.DataFrame(columns=['k', 'Name', 'Label', 'GPS', 'Prob of point', 'Prob of region', '# of points in region', 'Error', 'Closest GPS',	'Smallest Error'])
         self.gridDim = gridDim
         self.FinalReports = pd.read_csv('../Data/Checked_FinalReports.csv')
+        self.Cases=pd.read_csv('../Data/FinalCases_V14.csv')
 
     def Test(self, theta,eps, wcc, TrainSet, Test):
         Label = 'Prob'+str(eps)
@@ -23,15 +27,17 @@ class MILP():
             filename_pre = '../LiveExperiments/' + self.Date  + '/'
             self.Blackbox_Test_SelectOnePointAtaTime(filename_pre, .51*np.sqrt(2), TrainSet, Test)
         elif wcc=='WO':
-            # self.AtomRepDistDRT()
             # optimization with no constraint on number of reporters:
+
             b=self._optimize_Blackbox_Test_Train_MILP_multipleBeta(TrainSet, Test, Label,theta)
             b.to_csv('../Model/'+self.Date+'/trainedBeta_'+str(Test)+'.csv', index=False)
             self._optimize_Blackbox_Test_Test_Grid_multipleBeta('../Model/'+self.Date+'/ProbBeta_', '../Model/'+self.Date, Test, Label, theta, .51*np.sqrt(2))
 
+
     def _optimize_Blackbox_Test_Train_MILP_multipleBeta(self, Train_set, Test_set, Label, theta):
         # inp = pd.read_csv('C:/Users/eshaaban/PycharmProjects/MIST/Oct_7/Nov_5/IntermediateOutputs/Checked_FinalReports.csv')
-        Reporters = self.FinalReports[np.logical_and(self.FinalReports['Case Num']==Test_set, self.FinalReports['Loc N/lat']!='')]['Reporter Num']
+        Reporters=self.FinalReports.dropna(subset=['Loc N/lat'])
+        Reporters = Reporters[Reporters['Case Num']==Test_set]['Reporter Num']
         # Reporters = ['339', '153','125','403','359','250','273','34','216'] #self.Reporter_Case[self.Reporter_Case['Case Num'] == Test_set]['Reporter Num']
         Reporters = list(Reporters)
         if 'LKP' in Reporters:
@@ -190,7 +196,7 @@ class MILP():
                                                      'Prob of region':[Point_label_prob_Dic[point_label_dic[poi]]*NumberOfPointsinR[point_label_dic[poi]]/sum_cond_prob], '# of points in region':[NumberOfPointsinR[point_label_dic[poi]]]}))
                 indd+=1
             POINTS = POINTS.sort_values(['Heu1','Heu2','Prob of point'], ascending=False)
-            POINTS.to_csv(p2+'/'+str(case)+'2mul.csv', index=False)
+            POINTS.to_csv(p2+'/'+str(case)+'_2mul.csv', index=False)
 
     def _CalcConditionalReporterGivenRegion_all_beta(self, Train_set, Reporters):
         #return betas for the reporters of test set
@@ -235,10 +241,14 @@ class MILP():
 
     def _createGrid(self, Train_set, theta):
         OtherPoints = dict()
+        A=[]
         for c in Train_set:#Tmp.index.values:
             print (c)
-            drt = list(self.Reporter_Case[self.Reporter_Case['Case Num']==c]['DRT'])[0]
-            print (c)
+            try:
+                drt = list(self.Reporter_Case[self.Reporter_Case['Case Num']==c]['DRT'])[0]
+            except:
+                print 'No reported location for case:', c
+                continue
             loc = self.Reporter_Case[self.Reporter_Case['Case Num'] == c]
             rep_id=dict()
 
@@ -248,7 +258,7 @@ class MILP():
             reported_xy = [(float(i.split()[0]), float(i.split()[1])) for i in loc['Rep'] if i != 'None None' or i != 'nan nan']
 
             clusters = self._clustering(reported_xy, theta)
-            A=[]
+
             for key in clusters.keys():
                 # print A
                 A = A + self._grid_gen_poly_noNearDRT(key, clusters[key], theta, drt)[key]
@@ -604,12 +614,12 @@ class MILP():
     def AtomRepDistDRT(self):#Last Scene lat
         # Number of cases each reporter have participated in and report gps
         C = self.Cases.dropna(subset=['Found lat', 'Found lng'])#, 'Last Scene lat', 'Last Scene lng'])
-        Rep = self.Reports.dropna(subset=['Loc N/lat', 'Loc W/lng'])
+        Rep = self.FinalReports.dropna(subset=['Loc N/lat', 'Loc W/lng'])
 
         for c in C['Case Num'].index:
             R = Rep[Rep['Case Num'] == C['Case Num'][c]]
             print c,C['Case Num'][c]
-            d = self._dist(C.loc[c, 'Found lat'], C.loc[c, 'Found lng'], C.loc[c, 'Last Scene lat'], C.loc[c, 'Last Scene lng'])
+            d = gen.dist(C.loc[c, 'Found lat'], C.loc[c, 'Found lng'], C.loc[c, 'Last Scene lat'], C.loc[c, 'Last Scene lng'])
 
             self.Beta = self.Beta.append(pd.DataFrame({'Case Num': [C['Case Num'][c]], 'Reporter Num': ['LKP'], 'Dist(DRT, P)': [d], 'Rep': [str(C.loc[c, 'Last Scene lat']) + ' ' + str(C.loc[c, 'Last Scene lng'])],
                                                        'DRT': [str(C['Found lat'][c]) + ' ' + str(C['Found lng'][c])]}))
@@ -625,26 +635,17 @@ class MILP():
                     print 'la:',la,'ln:', ln
                     # print ite
                     try:
-                        plat, plng = g.convert_DMS_to_Decimal(la, ln)
+                        plat, plng = gen.convert_DMS_to_Decimal(la, ln)
                     except:
                         print 'connection lost!'
-                    # if ',' in R['Loc N/lat'][r] and plat==None:
-                    #     la = R['Loc N/lat'][r].split(',')[1]
-                    #     ln = R['Loc W/lng'][r].split(',')[1]
-                    #     try:
-                    #         plat, plng = g.convert_DMS_to_Decimal(la, ln)
-                    #         time.sleep(2)
-                    #     except:
-                    #         print 'can\'t convert GPS'
-
 
                     dist=0
                     if plat!=None and plng!=None:
-                        d1=self._dist(C.loc[c, 'Found lat'], C.loc[c, 'Found lng'], plat, plng)
-                        d2=self._dist(C.loc[c, 'Last Scene lat'], C.loc[c, 'Last Scene lng'], plat, plng)
+                        d1=gen.dist(C.loc[c, 'Found lat'], C.loc[c, 'Found lng'], plat, plng)
+                        d2=gen.dist(C.loc[c, 'Last Scene lat'], C.loc[c, 'Last Scene lng'], plat, plng)
                         if d1>200 and R['Loc W/lng'][r][0]!='-':
-                            plat, plng = g.convert_DMS_to_Decimal(R['Loc N/lat'][r], R['Loc W/lng'][r])
-                            dist = self._dist(C.loc[c, 'Found lat'], C.loc[c, 'Found lng'], plat, plng)
+                            plat, plng = gen.convert_DMS_to_Decimal(R['Loc N/lat'][r], R['Loc W/lng'][r])
+                            dist = gen.dist(C.loc[c, 'Found lat'], C.loc[c, 'Found lng'], plat, plng)
                         else:
                             dist = d1
 
@@ -653,5 +654,5 @@ class MILP():
                                                                'Rep':  [str(plat) + ' ' + str(plng)],
                                             'DRT': [str(C['Found lat'][c]) + ' ' + str(C['Found lng'][c])]}))
         self.Beta =  self.Beta[np.logical_and(self.Beta['Rep']!='nan nan', self.Beta['Rep']!='None None')]
-        self.Beta.to_csv('../Model/Beta'+'.csv', index=False)
+        self.Beta.to_csv('../Model/Beta.csv', index=False)
         return self.Beta
