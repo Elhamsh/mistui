@@ -61,7 +61,12 @@ def createTest(case):
         i+=1
         Dots=_getcycle(float(xx), float(yy), ((beta/2.)*np.sqrt(2))*1609.34, 8)
         path=[Dots[1], Dots[3], Dots[5], Dots[7], Dots[1]]
-        # kml.newlinestring(coords=[Dots[1], Dots[3], Dots[5], Dots[7]])
+        ls = kml.newlinestring(coords=[(Dots[1][1], Dots[1][0]), (Dots[3][1], Dots[3][0]), (Dots[5][1], Dots[5][0]), (Dots[7][1], Dots[7][0]), (Dots[1][1], Dots[1][0])])
+        ls.style.linestyle.width=10
+        # kml.newlinestring(coords=[(Dots[3][1], Dots[3][0]), (Dots[5][1], Dots[5][0])])
+        # kml.newlinestring(coords=[(Dots[5][1], Dots[5][0]), (Dots[7][1], Dots[7][0])])
+        # kml.newlinestring(coords=[(Dots[7][1], Dots[7][0]), (Dots[1][1], Dots[1][0])])
+
         mymap.addpath(path, Colors[0])
 
     mymap.draw('../Output/'+str(case)+'.html')
