@@ -8,6 +8,7 @@ import numpy as np
 import MILP
 import DrawMap as dm
 import os
+import ImageTk,Image
 class simpleGUI_tk(tk.Tk):
 
     def __init__(self,parent):
@@ -63,16 +64,37 @@ class simpleGUI_tk(tk.Tk):
         #C:\Users\eshaaban\PycharmProjects\MISTUI\Output\292.html
         webbrowser.open_new_tab(filename)
 
-    def aboutFinder(self,event):
-        print("here is the explanation of what the finder does, add extra stuff")
+    def aboutFinder(self):
+        window = tk.Toplevel(root)
+        window.maxsize(410,500)
+        window.title("About")
 
+        aboutMessage = "About:\nCySIS is part of the School of Computing, Informatics, \nand Decision Systems Engineering (CIDSE) in Arizona State University's \n"+\
+              "Fulton Schools of Engineering. The CySIS Lab is primarily focused on \nconducting basic research relating to challenging problems in cyber security, "+\
+             "\nsocial network mining, security informatics, and artificial intelligence\n with the goal of creating intelligent systems that have a significant impact\n"+\
+             " on real-world problems.  "
+
+        path = "cysis_sign2.jpg"
+
+        img = ImageTk.PhotoImage(Image.open(path))
+
+        panel = tk.Label(window, image = img)
+        panel2= tk.Label(window, text=aboutMessage)
+        panel.pack(side = "top", fill = "both")#expand = "yes")
+        panel2.pack(side = "bottom", fill = "both")
+        window.mainloop()
+        # pic = PhotoImage(file='cysis_sign2.jpg')
+        # msg = Message(window, text=aboutMessage,image=pic)
+        # msg.pack()
+    def aboutFinderEvent(self,event):
+        self.aboutFinder()
 
     def helpFinderEvent(self,event):
         self.helpFinder()
 
     def helpFinder(self):
         window = tk.Toplevel(root)
-        window.minsize(400,300);
+        window.minsize(400,300)
         window.title("Help")
         helpMessage = "Instructions to run Finder: \n1. Select the case name to be analyzed\n" + "2. Press the 'Preprocess' button under the File tab." +\
                       "\n3. Press the 'Run' button under the 'Preprocess' tab\n" + \
@@ -118,7 +140,7 @@ class simpleGUI_tk(tk.Tk):
         self.bind("<Control-h>", self.helpFinderEvent)
 
         helpmenu.add_command(label="About", command=self.aboutFinder, accelerator="Ctrl+A")
-        self.bind("<Control-a>", self.aboutFinder)
+        self.bind("<Control-a>", self.aboutFinderEvent)
 
         menubar.add_cascade(label="Help", menu=helpmenu)
         self.config(menu=menubar)
