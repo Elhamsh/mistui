@@ -5,6 +5,7 @@ import pygmaps
 import numpy as np
 import math
 import General as gen
+import simplekml
 
 def _getcycle(lat, lng, radius, NumDot):
     cycle = []
@@ -32,10 +33,10 @@ def createInput(case):
     i=Reports_Case.index[0]
     x,y=gen.convert_DMS_to_Decimal(Reports_Case['Loc N/lat'][i], Reports_Case['Loc W/lng'][i])
     mymap = pygmaps.maps(float(x), float(y), 9)
-    mymap.addpoint(float(x), float(y), color='blue', title=str(x)+', '+str(y))
+    mymap.addpoint(float(x), float(y), color='red', title=str(x)+', '+str(y))
     for i in Reports_Case.index[1:]:
         x,y=gen.convert_DMS_to_Decimal(Reports_Case['Loc N/lat'][i], Reports_Case['Loc W/lng'][i])
-        mymap.addpoint(float(x), float(y), color='blue', title=str(x)+', '+str(y))
+        mymap.addpoint(float(x), float(y), color='red', title=str(x)+', '+str(y))
     mymap.draw('../Output/Inp_'+str(case)+'.html')
 
 def createTest(case):
@@ -52,12 +53,16 @@ def createTest(case):
 
     labels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     i=0
+    kml = simplekml.Kml()
     for p in GPS_Coor:
         xx, yy = p.strip('()').split(', ')
         mymap.addpointRegion(float(xx), float(yy), color="yellow", label=labels[i], title=str(xx)+', '+str(yy))
+        kml.newpoint(name=labels[i], coords=[(float(yy), float(xx))])
         i+=1
         Dots=_getcycle(float(xx), float(yy), ((beta/2.)*np.sqrt(2))*1609.34, 8)
         path=[Dots[1], Dots[3], Dots[5], Dots[7], Dots[1]]
+        # kml.newlinestring(coords=[Dots[1], Dots[3], Dots[5], Dots[7]])
         mymap.addpath(path, Colors[0])
 
     mymap.draw('../Output/'+str(case)+'.html')
+    kml.save('../Output/'+str(case)+'.kml')

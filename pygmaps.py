@@ -164,6 +164,7 @@ class maps:
         f.write('\t\tposition: latlng,\n')
         f.write('\t\ttitle: tit,\n')
         f.write('\t\tlabel: lab,\n')
+        # f.write('\t\tnew google.maps.Size(42, 68),\n')
         f.write('\t\t});\n')
         f.write('\t\tmarker.setMap(map);\n')
         f.write('\n')
