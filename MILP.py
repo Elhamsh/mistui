@@ -5,72 +5,360 @@ from coinor.pulp import *
 import math
 
 class MILP():
-    def __init__(self, gridDim):
+    def __init__(self, path, gridDim, theta):
         self.GridSize = 100
+        self.path=path
         try:
-            self.Reporter_Case = pd.read_csv('../Model/Beta.csv')
+            self.Reporter_Case = pd.read_csv(self.path+'Model/Beta.csv')
         except:
             self.Reporter_Case =''
         self.Date = ''
-        self.Beta = pd.DataFrame(columns=['Case', 'Reporter', 'Beta'])
+        self.theta=theta
+        self.Beta = pd.DataFrame(columns=['Case Num', 'DRT', 'Dist(DRT, P)', 'Rep', 'Reported loc', 'Reporter Num'])
         self.ProbableDRT = pd.DataFrame(columns=['k', 'Name', 'Label', 'GPS', 'Prob of point', 'Prob of region', '# of points in region', 'Error', 'Closest GPS',	'Smallest Error'])
         self.gridDim = gridDim
-        self.FinalReports = pd.read_csv('../Data/Checked_FinalReports.csv')
-        self.Cases=pd.read_csv('../Data/FinalCases_V14.csv')
+        self.FinalReports = pd.read_csv(self.path+'Data/Checked_FinalReports.csv')
+        self.Cases=pd.read_csv(self.path+'Data/FinalCases_V16.csv')
+        if theta==0.5:
+            self.varArea = 30
+        elif theta==1:
+            self.varArea = 60
+        self.epsilon = 0.03
+        self.Label = 'Prob'+str(self.epsilon)
 
-    def Test(self, theta,eps, wcc, TrainSet, Test):
+    def Test(self,eps, wcc, TrainSet, Test):
         Label = 'Prob'+str(eps)
         if wcc=='W':
             #Train
-            b=self._optimize_Blackbox_Test_Train_MILP_multipleBeta_AreaSize(TrainSet, Test, Label,theta)
-            self._optimize_Blackbox_Test_Test_Grid_multipleBeta_AreaSize('../LiveExperiments/'+self.Date+'/ProbBeta_', '../LiveExperiments/'+self.Date+'/trainedBeta_', Test, Label, theta)
-            filename_pre = '../LiveExperiments/' + self.Date  + '/'
-            self.Blackbox_Test_SelectOnePointAtaTime(filename_pre, .51*np.sqrt(2), TrainSet, Test)
+            self._optimize_Blackbox_Test_Train_MILP_multipleBeta_AreaSize(TrainSet, Test)
+            self._optimize_Blackbox_Test_Test_Grid_multipleBeta_AreaSize(Test)
+            filename_pre =self.path+'Model/' + self.Date  + '/'
+            self.Blackbox_Test_SelectOnePointAtaTime(.51*np.sqrt(2), Test)
         elif wcc=='WO':
             # optimization with no constraint on number of reporters:
 
-            b=self._optimize_Blackbox_Test_Train_MILP_multipleBeta(TrainSet, Test, Label,theta)
-            b.to_csv('../Model/'+self.Date+'/trainedBeta_'+str(Test)+'.csv', index=False)
-            self._optimize_Blackbox_Test_Test_Grid_multipleBeta('../Model/'+self.Date+'/ProbBeta_', '../Model/'+self.Date, Test, Label, theta, .51*np.sqrt(2))
+            b=self._optimize_Blackbox_Test_Train_MILP_multipleBeta(TrainSet, Test, Label)
+            b.to_csv(self.path+'Model/'+self.Date+'/trainedBeta_'+str(Test)+'.csv', index=False)
+            self._optimize_Blackbox_Test_Test_Grid_multipleBeta('Model/'+self.Date+'/ProbBeta_', 'Model/'+self.Date, Test, Label)
 
-
-    def _optimize_Blackbox_Test_Train_MILP_multipleBeta(self, Train_set, Test_set, Label, theta):
-        # inp = pd.read_csv('C:/Users/eshaaban/PycharmProjects/MIST/Oct_7/Nov_5/IntermediateOutputs/Checked_FinalReports.csv')
+    #8/11/2016
+    def _optimize_Blackbox_Test_Train_MILP_multipleBeta_AreaSize(self, Train_set, Test_set):
         Reporters=self.FinalReports.dropna(subset=['Loc N/lat'])
         Reporters = Reporters[Reporters['Case Num']==Test_set]['Reporter Num']
-        # Reporters = ['339', '153','125','403','359','250','273','34','216'] #self.Reporter_Case[self.Reporter_Case['Case Num'] == Test_set]['Reporter Num']
         Reporters = list(Reporters)
         if 'LKP' in Reporters:
             Reporters.remove('LKP')
         Cond_prob = self._CalcConditionalReporterGivenRegion_all_beta(Train_set, Reporters)
-        Cond_prob.to_csv('../Model/'+self.Date+'/ProbBeta_'+str(Test_set)+'.csv', index=False)
+        Cond_prob.to_csv(self.path+'Model/'+self.Date+'/ProbBeta_'+str(Test_set)+'.csv', index=False)
         self.Beta = pd.DataFrame(columns=['Case', 'Reporter', 'Beta'])
-        Case_Beta = dict()
 
+        OtherPoints = self._createGrid(Train_set)
+
+        Beta = dict()
+        Tmp = dict()
+        for j in Reporters:
+            Betat =  Cond_prob[np.logical_and(Cond_prob["Reporter Num"]==j,Cond_prob[self.Label]>0.5 )]#Cond_prob[Cond_prob["Reporter Num"]==j]
+            Tmpt = self.Reporter_Case[list(np.logical_and(list(self.Reporter_Case["Case Num"].isin(Train_set)),list(self.Reporter_Case["Reporter Num"] == j)))]
+            Tmpt = Tmpt[Tmpt['Dist(DRT, P)']<500]
+            if len(Betat)>=1 and len(Tmpt)>=1:
+                Beta[j] = Betat
+                Tmp[j] = Tmpt
+
+        for areaSize in range(1,self.varArea):
+            area = min(areaSize, len(Beta))
+            self.Beta = pd.DataFrame(columns=['Case', 'Reporter', 'Beta'])
+            prob = LpProblem("MIST", LpMaximize)
+
+            Xjb = LpVariable.dicts("Xjb", [(j,i) for j in Beta.keys()
+                                                 for i in range((np.power(len(Beta[j]),2)+len(Beta[j]))/2)], 0, 1, LpBinary)
+            for j in Beta.keys():
+                prob += lpSum([Xjb[(j,b)] for b in range((np.power(len(Beta[j]),2)+len(Beta[j]))/2)]) <= 1
+
+            prob += lpSum([Xjb[(j,b)] for j in Beta.keys() for b in range((np.power(len(Beta[j]),2)+len(Beta[j]))/2)])== area
+
+            prob += lpSum([self._delta(Tmp[o].loc[c, "Rep"], Tmp[o].loc[c, "DRT"], b) * np.log(self._Calcprob(list(Beta[o][Beta[o]['Beta']==b][self.Label])[0])[0]) * \
+                           Xjb[(o,(len(Beta[o]))*list(Beta[o]['Beta'].values).index(b)+list(Beta[o]['Beta'].values).index(b2)-sum(range(list(Beta[o]['Beta'].values).index(b)+1)))]+\
+                            (1 - self._delta(Tmp[o].loc[c, "Rep"], Tmp[o].loc[c, "DRT"], b))* self._delta(Tmp[o].loc[c, "Rep"], Tmp[o].loc[c, "DRT"], b2)*\
+                            np.log(self._Calcprob(list(Beta[o][Beta[o]['Beta']==b2][self.Label])[0]-list(Beta[o][Beta[o]['Beta']==b][self.Label])[0])[0]) * \
+                           Xjb[(o,(len(Beta[o]))*list(Beta[o]['Beta'].values).index(b)+list(Beta[o]['Beta'].values).index(b2)-sum(range(list(Beta[o]['Beta'].values).index(b)+1)))]\
+                            + (1 - self._delta(Tmp[o].loc[c, "Rep"], Tmp[o].loc[c, "DRT"], b2)) * np.log(self._Calcprob(list(Beta[o][Beta[o]['Beta']==b2][self.Label])[0])[1]) *\
+                           Xjb[(o, (len(Beta[o]))*list(Beta[o]['Beta'].values).index(b)+list(Beta[o]['Beta'].values).index(b2)-sum(range(list(Beta[o]['Beta'].values).index(b)+1)))]
+                          for o in Beta.keys()
+                          for c in Tmp[o].index.values
+                          for b in list(Beta[o]['Beta'])
+                          for b2 in list(Beta[o]['Beta'])[list(Beta[o]['Beta']).index(b):]#list(Beta['Beta'])[list(Beta['Beta']).index(b):]
+
+                          ])
+
+            # print 'done'
+            prob += lpSum([-(self._delta(Tmp[o].loc[c, "Rep"], poi, b) * np.log(self._Calcprob(list(Beta[o][Beta[o]['Beta']==b][self.Label])[0])[0]) *\
+                            Xjb[(o,(len(Beta[o]))*list(Beta[o]['Beta'].values).index(b)+list(Beta[o]['Beta'].values).index(b2)-sum(range(list(Beta[o]['Beta'].values).index(b)+1)))]+\
+                         (1 - self._delta(Tmp[o].loc[c, "Rep"], poi, b))*(self._delta(Tmp[o].loc[c, "Rep"], poi, b2))*\
+                        np.log(self._Calcprob(list(Beta[o][Beta[o]['Beta']==b2][self.Label])[0]-list(Beta[o][Beta[o]['Beta']==b][self.Label])[0])[0]) *\
+                            Xjb[(o,(len(Beta[o]))*list(Beta[o]['Beta'].values).index(b)+list(Beta[o]['Beta'].values).index(b2)-sum(range(list(Beta[o]['Beta'].values).index(b)+1)))]\
+                         + (1 - self._delta(Tmp[o].loc[c, "Rep"], poi, b2)) * np.log(self._Calcprob(list(Beta[o][Beta[o]['Beta']==b2][self.Label])[0])[1]) *\
+                            Xjb[(o,(len(Beta[o]))*list(Beta[o]['Beta'].values).index(b)+list(Beta[o]['Beta'].values).index(b2)-sum(range(list(Beta[o]['Beta'].values).index(b)+1)))]
+                            )
+                          for o in Beta.keys()
+                          for c in Tmp[o].index.values
+                          for b in list(Beta[o]['Beta'])
+                          for b2 in list(Beta[o]['Beta'])[list(Beta[o]['Beta']).index(b):]#list(Beta['Beta'])[list(Beta['Beta']).index(b):]
+                          for poi in OtherPoints[Tmp[o].loc[c, 'Case Num']]
+                          ])
+            prob.solve()
+            print "Status:", LpStatus[prob.status]
+            # Each of the variables is printed with it's resolved optimum value
+            for v in prob.variables():
+                Flag = True
+                # print v.name, "=", v.varValue
+                if v.varValue == 1:
+                    # Case_Beta[j] = list(Beta['Beta'])[int(v.name.split('_')[1])]
+                    index = (v.name.strip(')').split('(')[1])
+                    j = index.split(',')[0].strip('\'')
+                    index = int(index.split('_')[1])
+                    it=0
+                    lbound = len(Beta[j])
+                    lbound = len(Beta[j]) - it
+                    while index >= lbound and lbound > 0:
+                        it+=1
+                        index -= lbound
+                        lbound = len(Beta[j]) - it
+                    # print it, index
+                    self.Beta = self.Beta.append({'Case': Test_set, 'Reporter': j, 'Beta': list(Beta[j]['Beta'])[it]}, ignore_index=True)
+                    self.Beta = self.Beta.append({'Case': Test_set, 'Reporter': j, 'Beta': list(Beta[j]['Beta'])[it + index]}, ignore_index=True)
+
+            self.Beta.to_csv(self.path+'Model/'+self.Date+'/trainedBeta_'+str(Test_set)+'_area_'+str(area)+'.csv', index=False)
+            if area == len(Beta):
+                break
+        return self.Beta
+
+    def _optimize_Blackbox_Test_Test_Grid_multipleBeta_AreaSize(self,Test):
+        RepCount_dic = dict()
+        Prob_Beta = pd.read_csv(self.path+'Model/'+self.Date+'/ProbBeta_'+str(Test)+'.csv', dtype={'Reporter Num': str}).drop_duplicates()
+        loc = self.FinalReports[self.FinalReports['Case Num'] == Test]
+        rep_id=dict()
+        reported_xy = []
+        for ii in loc['Reporter Num'].index:
+            if str(loc['Loc N/lat'][ii])!= 'None' and str(loc['Loc N/lat'][ii])!= 'nan':
+                a,b='',''
+                if ',' not in loc['Loc N/lat'][ii]:
+                    a,b = gen.convert_DMS_to_Decimal(loc['Loc N/lat'][ii], loc['Loc W/lng'][ii])
+                else:
+                    a,b = gen.convert_DMS_to_Decimal(loc['Loc N/lat'][ii].split(',')[0], loc['Loc W/lng'][ii].split(',')[0])
+                rep_id[(float(a), float(b))] = loc['Reporter Num'][ii]
+                reported_xy.append((float(a), float(b)))
+
+        grid, clusters = self._createTestGrid(reported_xy)
+
+        for area in range(1,self.varArea):
+            print area
+            try:
+                # Selected_Beta = pd.read_csv(p2 + str(case) + '_area_' + str(area) + '.csv', dtype={'Reporter': str})
+                Selected_Beta = pd.read_csv(self.path+'Model/'+self.Date+'/trainedBeta_' + str(Test) + '_area_' + str(area) + '.csv', dtype={'Reporter': str})
+            except:
+                continue
+
+            Selected_Beta = Selected_Beta[Selected_Beta['Case'] == Test]
+
+            # grid = self._grid_gen(avg_reported_x, avg_reported_y, self.GridSize)
+            # DRT = self.Reporter_Case[self.Reporter_Case['Case Num']==Test]['DRT'].values[0]
+            region_points = self._CalcArea_Blackbox_MultipleBeta(grid, Test, Selected_Beta, rep_id)
+            PointToDraw_Dic = dict()
+            NumberOfPointsinR = dict()
+            sum_cond_prob = 0
+            for d in region_points.keys():
+                cond_prob = np.array([1.0])
+                flag = False
+                print d
+                if d!='':
+                    reps = d.strip(',').split(',')
+                    for l in reps:
+                        rep_beta=l.split(':')
+                        print rep_beta
+                        if '+' in rep_beta[1]:
+                            tmpvalue = Prob_Beta[np.logical_and(Prob_Beta['Reporter Num'] == (rep_beta[0]), Prob_Beta['Beta'] == float(rep_beta[1]))][self.Label].values
+                            if tmpvalue!=1:
+                                cond_prob *= 1 - tmpvalue
+                            else:
+                                cond_prob *= .001
+                        elif '-' in rep_beta[1]:
+                            beta1, beta2 = rep_beta[1].split('-')
+                            cond_prob *= (Prob_Beta[np.logical_and(Prob_Beta['Reporter Num'] == (rep_beta[0]), Prob_Beta['Beta'] == float(beta1))][self.Label].values[0]-
+                                          Prob_Beta[np.logical_and(Prob_Beta['Reporter Num'] == (rep_beta[0]), Prob_Beta['Beta'] == float(beta2))][self.Label].values[0])
+                        else:
+                            tmpvalue = Prob_Beta[np.logical_and(Prob_Beta['Reporter Num'] == (rep_beta[0]), Prob_Beta['Beta'] == float(rep_beta[1]))][self.Label].values
+                            if tmpvalue!=0:
+                                cond_prob *= tmpvalue
+                            else:
+                                cond_prob *= .001
+                        flag = True
+                    if flag == True:
+                        sum_cond_prob += cond_prob * len(region_points[d])
+                        PointToDraw_Dic[d] = cond_prob
+                        NumberOfPointsinR[d] = len(region_points[d])
+            # self.ProbableDRT = self.ProbableDRT.append({'k':'DRT','Name':'DRT', 'Label': DRT_label, 'Prob of point':cond_prob},ignore_index=True)
+
+            POINTS = pd.DataFrame(columns=['Name', 'Label', 'GPS', 'Prob of point', 'Prob of region', '# of points in region'])
+            points = []
+            point_label_dic =dict()
+            for d in PointToDraw_Dic.keys(): #Point_label_prob_Dic.keys():
+                for i in region_points[d]:
+                    points.append(i)
+                    point_label_dic[i]=d
+                    # POINTS = POINTS.append(pd.DataFrame({'Name':[''], 'Label': [d], 'GPS':[i], 'Prob of point':[PointToDraw_Dic[d][0]], 'Prob of region':[PointToDraw_Dic[d]*NumberOfPointsinR[d]/sum_cond_prob], '# of points in region':[NumberOfPointsinR[d]]}))
+
+            sorted_points, heu1, heu2 = self._Heuristics_Sorting(points, self.FinalReports, Test, 1+self.theta)#(0.51)*np.sqrt(2))
+            indd=0
+            for poi in sorted_points:
+                POINTS = POINTS.append(pd.DataFrame({'Name':[''], 'Label': [point_label_dic[poi]], 'GPS':[poi], 'Prob of point':[PointToDraw_Dic[point_label_dic[poi]][0]],
+                                                     'Heu1':[heu1[indd]], 'Heu2':[heu2[indd]],
+                                                     'Prob of region':[PointToDraw_Dic[point_label_dic[poi]]*NumberOfPointsinR[point_label_dic[poi]]/sum_cond_prob], '# of points in region':[NumberOfPointsinR[point_label_dic[poi]]]}))
+                indd+=1
+            POINTS = POINTS.sort_values(['Prob of point','Heu2', 'Heu1'], ascending=False)
+
+            POINTS.to_csv(self.path+'Model/'+self.Date+'/'+str(Test)+'area'+str(area)+'2mul.csv', index=False)
+
+       
+    def _CalcArea_MultipleBeta_Blackbox_Test(self, grid, case, Selected_Beta):
+        region_points = dict()
+        rep_locs = self.FinalReports[self.Reporter_Case['Case Num']==case]['Rep']
+        rep_nums = self.Reporter_Case[self.Reporter_Case['Case Num']==case]['Reporter Num']
+        for i in grid.keys():
+            # print i
+            for j in grid[i]:
+                var = ''
+                # if gen.dist(j[0], j[1], 37.4636043, -107.5339873)<=1:
+                #      print 'reporter 109 in range', j
+
+                for ii in rep_locs.index.values:
+                    d = gen.dist(j[0], j[1], rep_locs[ii].split()[0], rep_locs[ii].split()[1])
+                    betas = np.sort(Selected_Beta[Selected_Beta['Reporter']==(rep_nums[ii])]['Beta'])
+                    var_tmp=''
+                    if len(betas)>0:
+                        if d<=betas[0]:
+                            var_tmp = str(rep_nums[ii])+':'+str(betas[0])+','
+                        elif d<= betas[1]:
+                            var_tmp = str(rep_nums[ii])+':'+str(betas[1])+'-'+str(betas[0])+','
+                        elif var_tmp=='' and len(betas)>0:
+                            var_tmp=str(rep_nums[ii])+':+'+str(betas[1])+','
+
+                        var+=var_tmp
+
+                region_points.setdefault(var, []).append(j)
+        return region_points
+
+    def Blackbox_Test_SelectOnePointAtaTime(self,thre, Test):
+        RepCount_dic = dict()
+        Reporters = self.FinalReports[self.FinalReports['Case Num']==(Test)]
+        for re in list(set(Reporters['Reporter Num'])):
+            RepCount_dic[re]= list(Reporters['Reporter Num']).count(re)
+        if 'LKP' in RepCount_dic:
+            RepCount_dic['LKP'] = 0
+
+        points = pd.DataFrame(columns=['# of points in region', 'GPS', 'Label', 'Name',	'Prob of point',
+                                       'Prob of region', 'Dist'])
+        areaFile=1
+
+        for area in range(1,self.varArea):#(1, 17):
+            Flag = False
+            try:
+                input = pd.read_csv(self.path+'Model/'+self.Date+'/'+str(int(Test))+ 'area' + str(area)+'2mul.csv')
+                Flag = True
+                areaFile = area
+                for ind in range(len(input)):
+                    if input.loc[ind, 'GPS'] not in list(points['GPS']):
+                        points = points.append(input.loc[ind])
+                        break
+            except:
+                if not Flag:
+                    input = pd.read_csv(self.path+'Model/'+self.Date+'/'+str(int(Test))+ 'area' + str(areaFile)+'2mul.csv')
+                    if len(input)>=len(points):
+                        for ind in range(len(input)):
+                            if input.loc[ind, 'GPS'] not in list(points['GPS']):
+                                points = points.append(input.loc[ind])
+
+        points.to_csv(self.path+'Model/'+self.Date+'/'+'SelectedOnePointAtaTime_V1'+str(Test)+'.csv', index=False)
+
+
+    def _Heuristics_Sorting(self, Possible_GPS, HistoricalData_Reporters, Test_case, thre):
+        Reps = HistoricalData_Reporters[np.logical_and(np.logical_and(HistoricalData_Reporters['Case Num']==Test_case,
+                                                                        HistoricalData_Reporters['Loc N/lat']!=''),
+                                                    list(np.invert(np.array(HistoricalData_Reporters['Loc N/lat']).astype(str) =='nan')))]
+        RepCount_dic=dict()
+        for re in list(Reps['Reporter Num']):
+            RepCount_dic[re]= list(HistoricalData_Reporters['Reporter Num']).count(re)
+        if 'LKP' in RepCount_dic:
+            RepCount_dic['LKP'] = 0
+
+        GPS_withinReps = dict()
+        # rep_id=dict()
+        rep_locs = []
+        rep_nums=[]
+        for ii in Reps['Reporter Num'].index:
+            # if str(loc['Loc N/lat'][ii])!= 'None' and str(loc['Loc N/lat'][ii])!= 'nan':
+            a,b='',''
+            if ',' in Reps['Loc N/lat'][ii]:
+                a,b = gen.convert_DMS_to_Decimal(Reps['Loc N/lat'][ii].split(',')[0], Reps['Loc W/lng'][ii].split(',')[0])
+            else:
+                a,b = gen.convert_DMS_to_Decimal(Reps['Loc N/lat'][ii], Reps['Loc W/lng'][ii])
+            # rep_id[(float(a), float(b))] = Reps['Reporter Num'][ii]
+            rep_locs.append((float(a), float(b)))
+            rep_nums.append(Reps['Reporter Num'][ii])
+
+        for gps in Possible_GPS:
+            lat, lng = gps[0], gps[1]
+            for reps in rep_locs:
+                if gen.dist(lat, lng, reps[0], reps[1])<=thre:
+                    GPS_withinReps.setdefault(gps, []).append(rep_nums[rep_locs.index(reps)])
+        NumofReps = []
+        SumofPrior = []
+        points = []
+        for item in Possible_GPS:
+            if item in GPS_withinReps:
+                NumofReps.append(len(GPS_withinReps[item]))
+            else:
+                NumofReps.append(0)
+            v=0
+            if item in GPS_withinReps:
+                for rr in GPS_withinReps[item]:
+                    v +=  RepCount_dic[rr]-1
+            SumofPrior.append(v)
+        from operator import itemgetter
+        sorted_tuples = sorted(zip(Possible_GPS, NumofReps, SumofPrior), key=itemgetter(1,2), reverse=True)
+        points, heu1, heu2 = list(zip(*sorted_tuples))
+        return points, heu1, heu2
+
+
+    #updated
+    def _optimize_Blackbox_Test_Train_MILP_multipleBeta(self, Train_set, Test_set, Label):
+        # inp = pd.read_csv('C:/Users/eshaaban/PycharmProjects/MIST/Oct_7/Nov_5/IntermediateOutputs/Checked_FinalReports.csv')
+        Reporters=self.FinalReports.dropna(subset=['Loc N/lat'])
+        Reporters = Reporters[Reporters['Case Num']==Test_set]['Reporter Num']
+        Reporters = list(Reporters)
+        if 'LKP' in Reporters:
+            Reporters.remove('LKP')
+        Cond_prob = self._CalcConditionalReporterGivenRegion_all_beta(Train_set, Reporters)
+        Cond_prob.to_csv(self.path+'Model/'+self.Date+'/ProbBeta_'+str(Test_set)+'.csv', index=False)
+        self.Beta = pd.DataFrame(columns=['Case', 'Reporter', 'Beta'])
         #random found locations
-        OtherPoints = dict()
-        for c in Train_set:#Tmp.index.values:
-            OtherPoints[c] = self._createGrid(Train_set, theta)
+        OtherPoints =self._createGrid(Train_set)
         for j in Reporters:
             Tmp = self.Reporter_Case[list(np.logical_and(list(self.Reporter_Case["Case Num"].isin(Train_set)),list(self.Reporter_Case["Reporter Num"] == j)))]
-            print (j, len(Tmp))
+            #print (j, len(Tmp))
             Tmp = Tmp[Tmp['Dist(DRT, P)']<500]
-            print (j, len(Tmp))
-            Beta = Cond_prob[Cond_prob["Reporter Num"]==j]
-            print (j)
+            #print (j, len(Tmp))
+            Beta = Cond_prob[np.logical_and(Cond_prob["Reporter Num"]==j,Cond_prob[Label]>0.5 )]
+            #print (j)
 
             if len(Beta)>=1 and len(Tmp)>=1:
                 prob = LpProblem("MIST", LpMaximize)
-                Xjb = LpVariable.dicts("Xjb", range((np.power(len(Beta),2)+len(Beta))/2), 0, 1, cat='LPBinary')
-                # Xjb2 = LpVariable.dicts("Xjb2", range(len(Beta)), 0, 1, LpBinary)
-                # Z = LpVariable.dicts("Z", range(np.power(len(Beta), 2)), 0, 1, LpBinary)
-                # prob += lpSum([Xjb[list(Beta['Beta'].values).index(len(Beta)*list(Beta['Beta'].values).index(b)+list(Beta['Beta'].values).index(b2)-(sum(range(list(Beta['Beta'].values).index(b2)+1))))] for b in Beta['Beta'].values for b2 in Beta['Beta'].values[list(Beta['Beta'].values).index(b):]]) == 1
+                Xjb = LpVariable.dicts("Xjb", range((np.power(len(Beta),2)+len(Beta))/2), 0, 1, LpBinary)
                 prob += lpSum([Xjb[b] for b in range((np.power(len(Beta),2)+len(Beta))/2)]) <= 1
 
                 prob += lpSum([self._delta(Tmp.loc[c, "Rep"], Tmp.loc[c, "DRT"], b) * np.log(self._Calcprob(list(Beta[Beta['Beta']==b][Label])[0])[0]) * \
                                Xjb[(len(Beta))*list(Beta['Beta'].values).index(b)+list(Beta['Beta'].values).index(b2)-sum(range(list(Beta['Beta'].values).index(b)+1))]+\
                                 (1 - self._delta(Tmp.loc[c, "Rep"], Tmp.loc[c, "DRT"], b))* self._delta(Tmp.loc[c, "Rep"], Tmp.loc[c, "DRT"], b2)*\
-                                np.log(self._Calcprob(list(Beta[Beta['Beta']==b2][Label])[0]-list(Beta[Beta['Beta']==b][Label]))[0]) * \
+                                np.log(self._Calcprob(list(Beta[Beta['Beta']==b2][Label])[0]-list(Beta[Beta['Beta']==b][Label])[0])[0]) * \
                                Xjb[(len(Beta))*list(Beta['Beta'].values).index(b)+list(Beta['Beta'].values).index(b2)-sum(range(list(Beta['Beta'].values).index(b)+1))]\
                                 + (1 - self._delta(Tmp.loc[c, "Rep"], Tmp.loc[c, "DRT"], b2)) * np.log(self._Calcprob(list(Beta[Beta['Beta']==b2][Label])[0])[1]) *\
                                Xjb[(len(Beta))*list(Beta['Beta'].values).index(b)+list(Beta['Beta'].values).index(b2)-sum(range(list(Beta['Beta'].values).index(b)+1))]
@@ -83,7 +371,7 @@ class MILP():
                 prob += lpSum([-(self._delta(Tmp.loc[c, "Rep"], poi, b) * np.log(self._Calcprob(list(Beta[Beta['Beta']==b][Label])[0])[0]) *\
                                 Xjb[(len(Beta))*list(Beta['Beta'].values).index(b)+list(Beta['Beta'].values).index(b2)-sum(range(list(Beta['Beta'].values).index(b)+1))]+\
                              (1 - self._delta(Tmp.loc[c, "Rep"], poi, b))*(self._delta(Tmp.loc[c, "Rep"], poi, b2))*\
-                            np.log(self._Calcprob(list(Beta[Beta['Beta']==b2][Label])[0]-list(Beta[Beta['Beta']==b][Label]))[0]) *\
+                            np.log(self._Calcprob(list(Beta[Beta['Beta']==b2][Label])[0]-list(Beta[Beta['Beta']==b][Label])[0])[0]) *\
                                 Xjb[(len(Beta))*list(Beta['Beta'].values).index(b)+list(Beta['Beta'].values).index(b2)-sum(range(list(Beta['Beta'].values).index(b)+1))]\
                              + (1 - self._delta(Tmp.loc[c, "Rep"], poi, b2)) * np.log(self._Calcprob(list(Beta[Beta['Beta']==b2][Label])[0])[1]) *\
                                 Xjb[(len(Beta))*list(Beta['Beta'].values).index(b)+list(Beta['Beta'].values).index(b2)-sum(range(list(Beta['Beta'].values).index(b)+1))]
@@ -98,13 +386,13 @@ class MILP():
                 print ("Status:", LpStatus[prob.status])
                 # Each of the variables is printed with it's resolved optimum value
                 for v in prob.variables():
-                    Flag = True
-                    print (v.name, "=", v.varValue)
+                    #Flag = True
+                    #print (v.name, "=", v.varValue)
                     if v.varValue == 1:
                         # Case_Beta[j] = list(Beta['Beta'])[int(v.name.split('_')[1])]
                         index = int(v.name.split('_')[1])
                         it=0
-                        lbound = len(Beta)
+                        #lbound = len(Beta)
                         lbound = len(Beta) - it
                         while index >= lbound and lbound > 0:
                             it+=1
@@ -116,12 +404,12 @@ class MILP():
                         self.Beta = self.Beta.append({'Case': Test_set, 'Reporter': j, 'Beta': list(Beta['Beta'])[it + index]}, ignore_index=True)
         return self.Beta
 
-    def _optimize_Blackbox_Test_Test_Grid_multipleBeta(self, p1, p2,CC, Label,theta, closeness_thre):
+    def _optimize_Blackbox_Test_Test_Grid_multipleBeta(self, p1, p2,CC, Label):
         #Without constraint
         for case in [CC]:
             grid = []
             Prob_Beta = pd.read_csv(p1+str(case)+'.csv', dtype={'Reporter Num': str}).drop_duplicates()
-            print ('Case:', case)
+            #print ('Case:', case)
             #find the grid
 
             loc = self.FinalReports[self.FinalReports['Case Num']==case]
@@ -137,42 +425,42 @@ class MILP():
                     rep_id[(float(a), float(b))] = loc['Reporter Num'][ii]
                     reported_xy.append((float(a), float(b)))
 
-            clusters = self._clustering(reported_xy, theta)
-
-            for key in clusters.keys():
-                try:
-                    grid.update(self._grid_gen_poly(key, clusters[key], theta))
-                except:
-                    grid = self._grid_gen_poly(key, clusters[key], theta)
+            grid, clusters = self._createTestGrid(reported_xy)
 
             Selected_Beta = pd.read_csv(p2 + '/trainedBeta_' +str(case) + '.csv', dtype={'Reporter': str})
             Selected_Beta = Selected_Beta[Selected_Beta['Case'] == case]
 
-            region_points = self._CalcArea_Blackbox_MultipleBeta(grid, case, Selected_Beta, rep_id)
+            region_points = self._CalcArea_Blackbox_MultipleBeta(grid, case, Selected_Beta, rep_id) ##########
             Point_label_prob_Dic = dict()
             NumberOfPointsinR = dict()
             sum_cond_prob = 0
 
             for d in region_points.keys():
-                print (d)
+                #print (d)
                 cond_prob = np.array([1.0])
                 flag = False
-                print (d)
+                #print (d)
                 if d!='':
                     reps = d.strip(',').split(',')
                     for l in reps:
                         rep_beta=l.split(':')
-                        print (rep_beta)
+                        #print (rep_beta)
                         if '+' in rep_beta[1]:# and float(rep_beta[1])!=2.5:
                             tmpvalue = Prob_Beta[np.logical_and(Prob_Beta['Reporter Num'] == (rep_beta[0]), Prob_Beta['Beta'] == float(rep_beta[1]))][Label].values
                             if tmpvalue!=1:
                                 cond_prob *= 1 - tmpvalue
+                            else:
+                                cond_prob *= 0.001
                         elif '-' in rep_beta[1]:
                             beta1, beta2 = rep_beta[1].split('-')
                             cond_prob *= (Prob_Beta[np.logical_and(Prob_Beta['Reporter Num'] == (rep_beta[0]), Prob_Beta['Beta'] == float(beta1))][Label].values-\
                             Prob_Beta[np.logical_and(Prob_Beta['Reporter Num'] == (rep_beta[0]), Prob_Beta['Beta'] == float(beta2))][Label].values)
                         else:
-                            cond_prob *= Prob_Beta[np.logical_and(Prob_Beta['Reporter Num'] == (rep_beta[0]), Prob_Beta['Beta'] == float(rep_beta[1]))][Label].values
+                            tmpvalue = Prob_Beta[np.logical_and(Prob_Beta['Reporter Num'] == (rep_beta[0]), Prob_Beta['Beta'] == float(rep_beta[1]))][Label].values
+                            if tmpvalue!=0:
+                                cond_prob *= tmpvalue
+                            else:
+                                cond_prob *= 0.001
                         flag = True
                     if flag == True:
                         sum_cond_prob += cond_prob * len(region_points[d])
@@ -188,14 +476,14 @@ class MILP():
                     point_label_dic[i]=d
 
 
-            sorted_points, heu1, heu2 = self._Heuristics_Sorting(points, self.FinalReports, case, closeness_thre)
+            sorted_points, heu1, heu2 = self._Heuristics_Sorting(points, self.FinalReports, case, 1+self.theta)#########
             indd=0
             for poi in sorted_points:
                 POINTS = POINTS.append(pd.DataFrame({'Name':[''], 'Label': [point_label_dic[poi]], 'GPS':[poi], 'Prob of point':[Point_label_prob_Dic[point_label_dic[poi]][0]],
                                                      'Heu1':[heu1[indd]], 'Heu2':[heu2[indd]],
                                                      'Prob of region':[Point_label_prob_Dic[point_label_dic[poi]]*NumberOfPointsinR[point_label_dic[poi]]/sum_cond_prob], '# of points in region':[NumberOfPointsinR[point_label_dic[poi]]]}))
                 indd+=1
-            POINTS = POINTS.sort_values(['Heu1','Heu2','Prob of point'], ascending=False)
+            POINTS = POINTS.sort_values(['Prob of point', 'Heu2','Heu1'], ascending=False)
             POINTS.to_csv(p2+'/'+str(case)+'_2mul.csv', index=False)
 
     def _CalcConditionalReporterGivenRegion_all_beta(self, Train_set, Reporters):
@@ -205,7 +493,6 @@ class MILP():
         Train_Beta = Train_Beta.drop_duplicates(Train_Beta.columns)
         Train_Beta = Train_Beta[np.logical_and(Train_Beta['Rep']!='nan nan', Train_Beta['Rep']!='None None')]
 
-        ind=0
         for r in list(Reporters):
             if str(r)!='nan':
                 Tmp = Train_Beta[Train_Beta['Reporter Num']==r]
@@ -218,37 +505,29 @@ class MILP():
                     for b in list(Acc_Beta):
                         s =  (map(lambda x: x<=b,Tmp['Dist(DRT, P)']).count(True))
                         t = float(len(Tmp))
-                        # SE = np.sqrt((s/t)- np.power((s/t),2))/np.sqrt(t)
-                        SE = 1- ((len(Train_set)-t)/float(len(Train_set)))
-                        p1 = s/t - 0.1*SE if s/t - 0.1*SE>0 else 0
-                        # p11 = s/t + 0.1*SE if s/t + 0.1*SE<=1 else 1
-                        p2 = s/t - 0.5*SE if s/t - 0.5*SE>0 else 0
-                        # p22 = s/t + 0.5*SE if s/t + 0.5*SE<=1 else 1
-                        p3 = s/t - .2*SE if s/t - .2*SE>0 else 0
-                        # p33 = s/t + 0.2*SE if s/t + 0.2*SE<=1 else 1
-                        p4 = s/t - 0.9*SE if s/t - 0.9*SE>0 else 0
-                        # p44 = s/t + 0.9*SE if s/t + 0.9*SE<=1 else 1
+
+                        SE = ((len(Train_set)-t)/float(len(Train_set)))
+                        p1 = s/t - 0.1*SE if s/t - 0.1*SE>0 else 0                        
+                        p2 = s/t - 0.15*SE if s/t - 0.15*SE>0 else 0                       
+                        p3 = s/t - .2*SE if s/t - .2*SE>0 else 0                       
+                        p4 = s/t - 0.01*SE if s/t - 0.01*SE>0 else 0            
                         p5 = s/t - 0.05*SE if s/t - 0.05*SE>0 else 0
-                        # p55 = s/t + 0.05*SE if s/t + 0.05*SE<=1 else 1
-                        p6 = s/t - 0.3*SE if s/t - 0.3*SE>0 else 0
+                        p6 = s/t - 0.03*SE if s/t - 0.03*SE>0 else 0
                         p7 = s/t - 0.4*SE if s/t - 0.4*SE>0 else 0
 
-                        ConProb = ConProb.append(pd.DataFrame({'Reporter Num': [r], 'Beta':[b], 'Support': [s], 'Total cases': [t], 'SE': [SE] , 'Prob0.1': [p1],'Prob0.5': [p2],'Prob0.2': [p3],
-                                                               'Prob0.9':[p4], 'Prob0': [s/t], 'Prob0.3': [p6], 'Prob0.4':[p7],
+                        ConProb = ConProb.append(pd.DataFrame({'Reporter Num': [r], 'Beta':[b], 'Support': [s], 'Total cases': [t], 'SE': [SE] , 'Prob0.1': [p1],'Prob0.15': [p2],'Prob0.2': [p3],
+                                                               'Prob0.01':[p4], 'Prob0': [s/t], 'Prob0.03': [p6], 'Prob0.4':[p7],
                                                                'Prob0.05': [p5],}))
 
         return ConProb
 
-    def _createGrid(self, Train_set, theta):
+    #updated
+    def _createGrid(self, Train_set):
         OtherPoints = dict()
-        A=[]
         for c in Train_set:#Tmp.index.values:
-            print (c)
-            try:
-                drt = list(self.Reporter_Case[self.Reporter_Case['Case Num']==c]['DRT'])[0]
-            except:
-                print 'No reported location for case:', c
-                continue
+            # print c
+            drt = list(self.Reporter_Case[self.Reporter_Case['Case Num']==c]['DRT'])[0]
+            # print c
             loc = self.Reporter_Case[self.Reporter_Case['Case Num'] == c]
             rep_id=dict()
 
@@ -257,21 +536,23 @@ class MILP():
 
             reported_xy = [(float(i.split()[0]), float(i.split()[1])) for i in loc['Rep'] if i != 'None None' or i != 'nan nan']
 
-            clusters = self._clustering(reported_xy, theta)
-
+            clusters = self._clustering(reported_xy)
+            A=[]
             for key in clusters.keys():
                 # print A
-                A = A + self._grid_gen_poly_noNearDRT(key, clusters[key], theta, drt)[key]
-        return A
+                A = A + self._grid_gen_poly_noNearDRT(key, clusters[key], self.theta, drt)[key]
+            OtherPoints[c]=A
+        return OtherPoints
 
-    def _clustering(self, reported_xy, theta):
+    #updated
+    def _clustering(self, reported_xy):
         clusters = dict()
         for xy in reported_xy:
             clusters.setdefault(xy, []).append(xy)
             for yz in reported_xy:
                 if xy != yz:
                     dd = gen.dist(xy[0], xy[1], yz[0], yz[1])
-                    if dd <= 2*theta:
+                    if dd <= 2*self.theta:
                         clusters.setdefault(xy, []).append(yz)
 
 
@@ -285,6 +566,16 @@ class MILP():
                             clusters[key1] = list(set(clusters[key1])|set(clusters[key2]))
                             clusters.pop(key2)
         return clusters
+
+    def _createTestGrid(self, reported_xy):
+        grid=dict()
+        clusters = self._clustering(reported_xy)
+        for key in clusters.keys():
+            try:
+                grid.update(self._grid_gen_poly(key, clusters[key]))
+            except:
+                grid = self._grid_gen_poly(key, clusters[key])
+        return grid, clusters
 
     def _grid_gen_poly_noNearDRT(self, key, points, beta,drt):
         #finds down left, and right up points, then calculate all points in between..
@@ -348,23 +639,16 @@ class MILP():
         curr = (a, c)
         while curr[1] < d:
             next = self._getRightPoint(a, curr[1], self.gridDim*1)[0]
-            flag = False
+            gen_points.append(next)
             drt_dist = gen.dist(next[0], next[1], drtx, drty)
             if drt_dist>1:
                 for p in points:
                     dist = gen.dist(p[0], p[1], next[0], next[1])
                     if dist<=(beta+.01)*np.sqrt(2):
-                        gen_points.append(next)
                         output.append(next)
-                        flag = True
                         break
             else:
-                gen_points.append(next)
                 output.append(next)
-
-            if flag == False:
-                gen_points.append(next)
-
             curr = next
         # output = gen_points
         # add points above the bottom row
@@ -388,7 +672,6 @@ class MILP():
         cycle = []
         rad = radius #unit: meter
         d = (rad/1000.0)/6378.8;
-        # d = (rad*10)/(4*10162.497770611415*0.9741419753696064);
         lat1 = (math.pi/180.0) * lat
         lng1 = (math.pi/180.0) * lng
 
@@ -447,18 +730,20 @@ class MILP():
         else:
             return 1
 
+    #updated
     def _Calcprob(self, x):
         # print x
         if x == 0:
             # happens when both betas are the same
-            return 1, 1#0.00001, 0.00001
+            return 0.001, 1-0.001#0.00001, 0.00001
         elif x == 1:
-            # print 'x==1 errrroooooooor'
-            return 1, .001#0.00001, 0.00001
+            # print 'x==1 error'
+            return 1-0.001, .001#0.00001, 0.00001
         else:
             return (x), (1-x)
 
-    def _grid_gen_poly(self, key, points, beta):
+    def _grid_gen_poly(self, key, points):
+        beta=self.theta
         if len(points)==1 and beta<=self.gridDim*.5:
             return {points[0]:points}
         gen_points = []
@@ -498,8 +783,9 @@ class MILP():
         b = min(max(x_l_d, x_u_r), 90)
         d = min(max(y_l_d, y_u_r), 180)
         # center of the squares are our points
-        print 'a: ', a,'b:', b, 'c:', c,'d:', d
+        #print 'a: ', a,'b:', b, 'c:', c,'d:', d
         gen_points.append((a, c))
+        flag=False
         for p in points:
             dist = gen.dist(p[0], p[1], a, c)
             if dist<=(beta+.01)*np.sqrt(2):
@@ -507,7 +793,7 @@ class MILP():
                 break
         # output.append((a,c))
         curr = (a, c)
-        while curr[1] < d:
+        while curr[1] <= d:
             next = self._getRightPoint(a, curr[1], self.gridDim*1)[0]
             flag = False
             for p in points:
@@ -525,7 +811,7 @@ class MILP():
         # output = gen_points
         for i in gen_points:
             curr = i
-            while curr[0] < b:
+            while curr[0] <= b:
                 next = self._getUpPoint(curr[0], i[1], self.gridDim*1)[0]
                 for p in points:
                     dist = gen.dist(p[0], p[1], next[0], next[1])
@@ -654,5 +940,5 @@ class MILP():
                                                                'Rep':  [str(plat) + ' ' + str(plng)],
                                             'DRT': [str(C['Found lat'][c]) + ' ' + str(C['Found lng'][c])]}))
         self.Beta =  self.Beta[np.logical_and(self.Beta['Rep']!='nan nan', self.Beta['Rep']!='None None')]
-        self.Beta.to_csv('../Model/Beta.csv', index=False)
+        self.Beta.to_csv(self.path+'Model/Beta.csv', index=False)
         return self.Beta

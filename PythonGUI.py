@@ -8,21 +8,23 @@ import numpy as np
 import MILP
 import DrawMap as dm
 import os
-import ImageTk,Image
+from Tkinter import PhotoImage
+import image
+#from PIL import ImageTk
+
 class simpleGUI_tk(tk.Tk):
-
+    path = '../'
     def __init__(self,parent):
-
+        self.path = path
         tk.Tk.__init__(self,parent)
-        self.cases=pd.read_csv('../Data/FinalCases_V14.csv', encoding='latin1',dtype={'Found lat':str})
-        self.reports=pd.read_csv('../Data/Checked_FinalReports.csv', encoding='latin1')
+        self.cases=pd.read_csv(self.path+'Data/FinalCases_V16.csv', encoding='latin1',dtype={'Found lat':str})
+        self.reports=pd.read_csv(self.path+'Data/Checked_FinalReports.csv', encoding='latin1')
         self.parent = parent
         self.menu()
         self.value_of_combo = ''
         self.selectedCaseNum=''
         self.list()
         self.button = tk.Button(self.parent, text = "Output Map")
-
 
     def PreprocessEvent(self, event):
         self.Preprocess()
@@ -39,7 +41,9 @@ class simpleGUI_tk(tk.Tk):
         # 241.0, 248.0, 251.0, 253.0, 256.0, 258.0, 265.0, 274.0, 276.0,279.0,280.0,283.0,286.0,287.0]
         train_cases=list(set(self.cases.dropna(subset=['Found lat', 'Found lng'])['Case Num'])&set(self.reports.dropna(subset=['Loc N/lat', 'Loc W/lng'])['Case Num']))
         if self.selectedCaseNum in self.reports.dropna(subset=['Loc N/lat', 'Loc W/lng'])['Case Num'].values:
-            obj.Test(theta=.5,eps=0, wcc='WO', TrainSet=train_cases, Test=self.selectedCaseNum)
+            if self.selectedCaseNum in train_cases:
+                train_cases.remove(self.selectedCaseNum)
+            obj.Test(eps=0.03, wcc='W', TrainSet=train_cases, Test=self.selectedCaseNum)
         else:
             print 'no reported location'
 
@@ -47,8 +51,8 @@ class simpleGUI_tk(tk.Tk):
         self.drawInput()
 
     def drawInput(self):
-        dm.createInput(self.selectedCaseNum)
-        filename = os.getcwd()+'\\..\Output\\Inp_'+str(self.selectedCaseNum)+'.html'
+        dm.createInput(self.path, self.selectedCaseNum)
+        filename = "file://"+os.getcwd()+"/"+self.path+'Output/Inp_'+str(self.selectedCaseNum)+'.html'
         webbrowser.open_new_tab(filename)
 
     def drawOutputEvent(self,event):
@@ -56,36 +60,36 @@ class simpleGUI_tk(tk.Tk):
 
     def drawOutput(self):
         try:
-            dm.createTest(self.selectedCaseNum)
+            dm.createTest(self.path, self.selectedCaseNum)
         except:
             print 'Error in draw output::createTest'
 
-        filename = os.getcwd()+'\\..\Output\\'+str(self.selectedCaseNum)+'.html'
+        filename = "file://"+os.getcwd()+"/"+self.path+'Output/'+str(self.selectedCaseNum)+'.html'
         #C:\Users\eshaaban\PycharmProjects\MISTUI\Output\292.html
         webbrowser.open_new_tab(filename)
 
     def aboutFinder(self):
         window = tk.Toplevel(root)
-        window.maxsize(410,500)
+        window.maxsize(400,500)
         window.title("About")
+        window.configure(background='black')
+        aboutMessage = "\n MIST 1.0 \n\n Powered by CySIS Lab \n\n School of Computing, Informatics, and Decision Systems Engineering (CIDSE)\n Ira A. Fulton School of Engineering\n Arizona State University \n" \
+                       " \n\nThe CySIS Lab is primarily focused on conducting basic research relating to challenging problems in cyber security, " \
+                       "social network mining, security informatics, and artificial intelligence with the goal of creating intelligent systems that have a significant impact on real-world problems."
 
-        aboutMessage = "About:\nCySIS is part of the School of Computing, Informatics, \nand Decision Systems Engineering (CIDSE) in Arizona State University's \n"+\
-              "Fulton Schools of Engineering. The CySIS Lab is primarily focused on \nconducting basic research relating to challenging problems in cyber security, "+\
-             "\nsocial network mining, security informatics, and artificial intelligence\n with the goal of creating intelligent systems that have a significant impact\n"+\
-             " on real-world problems.  "
-
-        path = "cysis_sign2.jpg"
-
-        img = ImageTk.PhotoImage(Image.open(path))
-
+        image = path+"MISTUI/cysis_sign2.gif"
+        #image=open(image)
+        img = PhotoImage(file=image)
+        img = img.subsample(8, 8)
         panel = tk.Label(window, image = img)
-        panel2= tk.Label(window, text=aboutMessage)
-        panel.pack(side = "top", fill = "both")#expand = "yes")
-        panel2.pack(side = "bottom", fill = "both")
+        panel2= tk.Label(window, text=aboutMessage, justify=LEFT, wraplength=370)
+        panel.pack(side = "top",expand = "yes")
+        panel2.pack( side = "bottom", fill = "both", expand=True)
         window.mainloop()
         # pic = PhotoImage(file='cysis_sign2.jpg')
         # msg = Message(window, text=aboutMessage,image=pic)
         # msg.pack()
+
     def aboutFinderEvent(self,event):
         self.aboutFinder()
 
@@ -166,12 +170,13 @@ class simpleGUI_tk(tk.Tk):
 
 
 if __name__ == "__main__":
-
+    path = "../"
     root = simpleGUI_tk(None)
     root.geometry('450x250')
 
     root.title('Missing Person Intelligence Synthesis Toolkit')
-    obj = MILP.MILP(gridDim=1)
+
+    obj = MILP.MILP(path=path, gridDim=1, theta=0.5)
     root.mainloop()
 
 

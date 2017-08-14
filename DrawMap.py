@@ -24,8 +24,8 @@ def _getcycle(lat, lng, radius, NumDot):
         cycle.append((float(y*(180.0/math.pi)),float(x*(180.0/math.pi))))
     return cycle
 
-def createInput(case):
-    Reports = pd.read_csv('../Data/Checked_FinalReports.csv')
+def createInput(path_, case):
+    Reports = pd.read_csv(path_+'Data/Checked_FinalReports.csv')
     Colors = ["#023FA5","#7D87B9","#BEC1D4","#D6BCC0","#BB7784","#FFFFFF", "#4A6FE3","#8595E1","#B5BBE3","#E6AFB9","#E07B91","#D33F6A",
               "#11C638","#8DD593","#C6DEC7","#EAD3C6","#F0B98D","#EF9708", "#0FCFC0","#9CDED6","#D5EAE7","#F3E1EB","#F6C4E1","#F79CD4"]
 
@@ -37,11 +37,12 @@ def createInput(case):
     for i in Reports_Case.index[1:]:
         x,y=gen.convert_DMS_to_Decimal(Reports_Case['Loc N/lat'][i], Reports_Case['Loc W/lng'][i])
         mymap.addpoint(float(x), float(y), color='red', title=str(x)+', '+str(y))
-    mymap.draw('../Output/Inp_'+str(case)+'.html')
+    mymap.draw(path_+'Output/Inp_'+str(case)+'.html')
 
-def createTest(case):
+def createTest(path_, case):
 
-    Points = pd.read_csv('../Model/'+str(case)+'_2mul.csv')
+    #Points = pd.read_csv('../Model/'+str(case)+'_2mul.csv')
+    Points = pd.read_csv(path_+'Model/SelectedOnePointAtaTime_V1'+str(case)+'.csv')
     Colors = ["#023FA5","#7D87B9","#BEC1D4","#D6BCC0","#BB7784","#FFFFFF", "#4A6FE3","#8595E1","#B5BBE3","#E6AFB9","#E07B91","#D33F6A",
               "#11C638","#8DD593","#C6DEC7","#EAD3C6","#F0B98D","#EF9708", "#0FCFC0","#9CDED6","#D5EAE7","#F3E1EB","#F6C4E1","#F79CD4"]
 
@@ -69,5 +70,5 @@ def createTest(case):
 
         mymap.addpath(path, Colors[0])
 
-    mymap.draw('../Output/'+str(case)+'.html')
-    kml.save('../Output/'+str(case)+'.kml')
+    mymap.draw('Output/'+str(case)+'.html')
+    kml.save('Output/'+str(case)+'.kml')
